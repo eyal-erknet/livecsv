@@ -1,11 +1,12 @@
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.dialects import registry
-from sqlalchemy.engine import default
 from sqlalchemy.engine.url import URL
 import time
+import duckdb
 import duckdb_engine
-from typing import Tuple
+from typing import Tuple, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
 
 ########################################################################
 # 1. The Connection Provider
@@ -17,7 +18,7 @@ from typing import Tuple
 # from the underlying DuckDB engine.
 ########################################################################
 
-class LiveCSVConnectionProvider:
+class LiveCSVConnectionProvider(duckdb_engine.ConnectionWrapper):
     def __init__(self, cache_minutes: int, tablename: str, csv_url: str) -> None:
         """
         :param cache_minutes: Cache lifetime in minutes. Zero means unlimited.
@@ -27,47 +28,33 @@ class LiveCSVConnectionProvider:
         self.cache_minutes = cache_minutes
         self.tablename = tablename
         self.csv_url = csv_url
-        self.last_refresh_time = 0
-        self.engine = None
-        self.conn = None  # This will store the single raw connection.
-        self.refresh()
+        self.last_refresh_time = time.time()
+        super().__init__(self.create_connection())
 
-    def refresh(self) -> None:
-        """Dispose of the old engine/connection (if any), create a new one using a StaticPool,
-        load the CSV into a table, and store the raw connection."""
-        if self.engine:
-            # Close the existing raw connection if it's open.
-            if self.conn:
-                try:
-                    self.conn.close()
-                except Exception:
-                    pass
-            self.engine.dispose()
-
-        # Create a new in‑memory DuckDB engine using a StaticPool.
-        self.engine = create_engine(
-            "duckdb:///:memory:",
-            poolclass=StaticPool,
-        )
-        # Get a raw connection once and store it.
-        self.conn = self.engine.raw_connection()
-
-        # Create the table by loading the CSV.
-        cur = self.conn.cursor()
-        cur.execute(f"""
+    def create_connection(self) -> duckdb.DuckDBPyConnection:
+        """Create and return a new connection with the CSV loaded into a table."""
+        conn = duckdb.connect()
+        conn.sql(f"""
             CREATE TABLE {self.tablename} AS 
             SELECT * FROM read_csv_auto('{self.csv_url}')
         """)
-        # Commit the changes so that they are visible.
-        self.conn.commit()
-
-        self.last_refresh_time = time.time()
-
-    def get_connection(self) -> "Connection":
-        """Return the stored raw DBAPI connection. Refresh the engine if the cache lifetime has expired."""
+        return conn
+    
+    def refresh_connection(self) -> None:
+        """Dispose of the old engine/connection if required and create a new one."""
         if (self.cache_minutes > 0) and (time.time() - self.last_refresh_time > self.cache_minutes * 60):
-            self.refresh()
-        return self.conn
+            self.close()
+            super().__init__(self.create_connection())
+            self.closed = False
+            self.last_refresh_time = time.time()
+    
+    def cursor(self) -> duckdb_engine.CursorWrapper:
+        self.refresh_connection()
+        return super().cursor()
+
+    def __getattr__(self, name: str) -> Any:
+        self.refresh_connection()
+        return super().__getattr__(name)
 
 ########################################################################
 # 2. The Dialect
@@ -101,7 +88,6 @@ class LiveCSVConnectionProvider:
 
 class LiveCSVDialect(duckdb_engine.Dialect):
     name = "livecsv"
-    driver = "duckdb"
     supports_statement_cache = False
 
     def create_connect_args(self, url: URL) -> Tuple[tuple, dict]:
@@ -133,30 +119,21 @@ class LiveCSVDialect(duckdb_engine.Dialect):
                 csv_url = "http://" + csv_url
 
         # Save our parsed parameters on the dialect instance.
-        self._mycsv_params = {
+        opts = {
             "cache_minutes": cache_minutes,
             "tablename": tablename,
             "csv_url": csv_url,
-            "ssl_mode": ssl_mode,
         }
-        # We return an empty tuple (and dict) because our DBAPI connect
-        # isn’t used directly.
-        return ([], {})
+        return ((), opts)
 
     def connect(self, *cargs, **cparams) -> "Connection":
         """
         This method is invoked by SQLAlchemy’s connection pool to obtain a
         DBAPI-level connection.
         """
+        # cparams = opts (from create_connect_args)
         # Create the caching provider on first use.
-        if not hasattr(self, "_mycsv_provider"):
-            self._mycsv_provider = LiveCSVConnectionProvider(
-                cache_minutes=self._mycsv_params["cache_minutes"],
-                tablename=self._mycsv_params["tablename"],
-                csv_url=self._mycsv_params["csv_url"]
-            )
-        # Return a raw DBAPI connection from the caching provider.
-        return self._mycsv_provider.get_connection()
+        return LiveCSVConnectionProvider(**cparams)
 
 ########################################################################
 # 3. Register the Dialect
