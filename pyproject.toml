@@ -29,7 +29,7 @@ classifiers = [
 ]
 
 [project.entry-points."sqlalchemy.dialects"]
-livecsv = "livecsv.dialect:LiveCSVDialect"
+livecsv = "livecsv.driver:LiveCSVDialect"
 
 [project.urls]
 Homepage = "https://github.com/eyal-erknet/livecsv"
