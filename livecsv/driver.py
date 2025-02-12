@@ -1,9 +1,11 @@
-from sqlalchemy.engine import default
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.dialects import registry
+from sqlalchemy.engine import default
+from sqlalchemy.engine.url import URL
 import time
-import duckdb
+import duckdb_engine
+from typing import Tuple
 
 ########################################################################
 # 1. The Connection Provider
@@ -16,7 +18,7 @@ import duckdb
 ########################################################################
 
 class LiveCSVConnectionProvider:
-    def __init__(self, cache_minutes, tablename, csv_url):
+    def __init__(self, cache_minutes: int, tablename: str, csv_url: str) -> None:
         """
         :param cache_minutes: Cache lifetime in minutes. Zero means unlimited.
         :param tablename: Name of the table to create.
@@ -30,7 +32,7 @@ class LiveCSVConnectionProvider:
         self.conn = None  # This will store the single raw connection.
         self.refresh()
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Dispose of the old engine/connection (if any), create a new one using a StaticPool,
         load the CSV into a table, and store the raw connection."""
         if self.engine:
@@ -61,7 +63,7 @@ class LiveCSVConnectionProvider:
 
         self.last_refresh_time = time.time()
 
-    def get_connection(self):
+    def get_connection(self) -> "Connection":
         """Return the stored raw DBAPI connection. Refresh the engine if the cache lifetime has expired."""
         if (self.cache_minutes > 0) and (time.time() - self.last_refresh_time > self.cache_minutes * 60):
             self.refresh()
@@ -97,12 +99,12 @@ class LiveCSVConnectionProvider:
 # - The dbapi() class method returns the duckdb module.
 ########################################################################
 
-class LiveCSVDialect(default.DefaultDialect):
+class LiveCSVDialect(duckdb_engine.Dialect):
     name = "livecsv"
     driver = "duckdb"
     supports_statement_cache = False
-    
-    def create_connect_args(self, url):
+
+    def create_connect_args(self, url: URL) -> Tuple[tuple, dict]:
         """
         Parse a URL of the form:
             livecsv://<ssl_mode>/<cache_minutes>/<tablename>/<csv_url>
@@ -141,7 +143,7 @@ class LiveCSVDialect(default.DefaultDialect):
         # isn’t used directly.
         return ([], {})
 
-    def connect(self, *cargs, **cparams):
+    def connect(self, *cargs, **cparams) -> "Connection":
         """
         This method is invoked by SQLAlchemy’s connection pool to obtain a
         DBAPI-level connection.
@@ -156,41 +158,12 @@ class LiveCSVDialect(default.DefaultDialect):
         # Return a raw DBAPI connection from the caching provider.
         return self._mycsv_provider.get_connection()
 
-    @classmethod
-    def import_dbapi(cls):
-        # Return the DuckDB DBAPI module.
-        return duckdb
-    
-    @classmethod
-    def dbapi(cls):
-         return cls.import_dbapi()
-    
-    def do_commit(self, dbapi_connection):
-        try:
-            dbapi_connection.commit()
-        except duckdb.TransactionException as ex:
-            if "no transaction is active" in str(ex):
-                # Ignore the error if there's no active transaction.
-                pass
-            else:
-                raise
-
-    def do_rollback(self, dbapi_connection):
-        try:
-            dbapi_connection.rollback()
-        except duckdb.TransactionException as ex:
-            if "no transaction is active" in str(ex):
-                # Ignore this error as well.
-                pass
-            else:
-                raise
-
 ########################################################################
 # 3. Register the Dialect
 ########################################################################
 # This makes the dialect available using the URL scheme "mycsv"
 ########################################################################
-def register_driver():
+def register_driver() -> None:
     registry.register("livecsv", __name__, "LiveCSVDialect")
 
 if __name__ == "__main__":
