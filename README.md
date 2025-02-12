@@ -13,9 +13,9 @@ pip install livecsv
 Dependencies
 
 livecsv depends on the following packages:
-	•	SQLAlchemy (>=2.0.0)
-	•	duckdb
-	•	duckdb_engine
+•	SQLAlchemy
+•	duckdb
+•	duckdb_engine
 
 These dependencies will be automatically installed when you install livecsv.
 
@@ -29,10 +29,10 @@ The connection string format for livecsv is:
 
 livecsv://<ssl_mode>/<cache_minutes>/<table_name>/<csv_url>
 
-	•	ssl_mode: Either secure (for HTTPS) or insecure (for HTTP).
-	•	cache_minutes: The number of minutes to cache the CSV data before refreshing. If 0, it is unlimited (not refreshed).
-	•	table_name: The name of the table that will be created in the in‑memory database.
-	•	csv_url: The URL to the CSV file (if the URL does not start with http, a scheme will be automatically prepended based on the ssl_mode).
+•	ssl_mode: Either secure (for HTTPS) or insecure (for HTTP).
+•	cache_minutes: The number of minutes to cache the CSV data before refreshing. If 0, it is unlimited (not refreshed).
+•	table_name: The name of the table that will be created in the in‑memory database.
+•	csv_url: The URL to the CSV file (if the URL does not start with http, a scheme will be automatically prepended based on the ssl_mode).
 
 ## Example
 
@@ -52,23 +52,23 @@ with engine.connect() as conn:
         print(row)
 
 In this example, livecsv:
-	•	Loads the CSV from the specified URL.
-	•	Creates a table named usernames.
-	•	Caches the data for 10 minutes.
-	•	Allows you to query the data using SQLAlchemy.
+•	Loads the CSV from the specified URL.
+•	Creates a table named usernames.
+•	Caches the data for 10 minutes.
+•	Allows you to query the data using SQLAlchemy.
 
 ## Testing with pytest
 
 livecsv includes tests that can be run using pytest.
 
 Steps to Run Tests
-	1.	Install pytest (if you haven’t already):
+1.	Install pytest (if you haven’t already):
 
 ```bash
 pip install pytest
 ```
 
-	2.	Run pytest
+2.	Run pytest
 From the root of your project, run:
 
 ```bash
