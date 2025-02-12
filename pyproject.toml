@@ -19,8 +19,7 @@ authors = [
 maintainers = [
   {name = "Eyal Rahmani", email = "eyal.rahmani@med.uni-heidelberg.de"},
 ]
-license = "MIT"
-license-files = ["LICEN[CS]E.*"]
+license = {file = "LICENSE"}
 keywords = ["sqlalchemy", "sql", "csv", "duckdb",]
 classifiers = [
     "Development Status :: 4 - Beta",
