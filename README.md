@@ -27,11 +27,11 @@ Connection String Format
 
 The connection string format for livecsv is:
 
-livecsv://<ssl_mode>/<cache_minutes>/<tablename>/<csv_url>
+livecsv://<ssl_mode>/<cache_minutes>/<table_name>/<csv_url>
 
 	•	ssl_mode: Either secure (for HTTPS) or insecure (for HTTP).
 	•	cache_minutes: The number of minutes to cache the CSV data before refreshing. If 0, it is unlimited (not refreshed).
-	•	tablename: The name of the table that will be created in the in‑memory database.
+	•	table_name: The name of the table that will be created in the in‑memory database.
 	•	csv_url: The URL to the CSV file (if the URL does not start with http, a scheme will be automatically prepended based on the ssl_mode).
 
 ## Example
